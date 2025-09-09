@@ -167,11 +167,11 @@ export default function PerformanceTool() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-secondary/5">
-      <div className="container mx-auto max-w-6xl p-4">
-        <div className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-2xl overflow-hidden border border-border/20">
+      <div className="container mx-auto max-w-6xl p-2 md:p-4">
+        <div className="bg-white/80 backdrop-blur-sm rounded-2xl md:rounded-3xl shadow-2xl overflow-hidden border border-border/20">
           <PerformanceHeader />
           
-          <div className="p-8 space-y-8">
+          <div className="p-4 md:p-8 space-y-4 md:space-y-8">
             <InfoAlerts />
             
             <LatencyMonitor isRunning={isRunning} />
