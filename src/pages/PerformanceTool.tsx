@@ -15,6 +15,7 @@ export default function PerformanceTool() {
   const [currentStatus, setCurrentStatus] = useState<string>();
   const [results, setResults] = useState<TestResult[]>([]);
   const openedWindowsRef = useRef<Window[]>([]);
+  const isRunningRef = useRef(false);
   const { toast } = useToast();
 
   const testWebsite = async (url: string, timeout: number): Promise<TestResult> => {
@@ -86,6 +87,7 @@ export default function PerformanceTool() {
     }
 
     setIsRunning(true);
+    isRunningRef.current = true;
     setCurrentTest(0);
     setTotalTests(config.websites.length);
     setResults([]);
@@ -97,7 +99,7 @@ export default function PerformanceTool() {
     });
 
     for (let i = 0; i < config.websites.length; i++) {
-      if (!isRunning) break;
+      if (!isRunningRef.current) break;
 
       const url = config.websites[i];
       setCurrentTest(i + 1);
@@ -118,7 +120,7 @@ export default function PerformanceTool() {
       }
 
       // Delay between tests (except for the last one)
-      if (i < config.websites.length - 1) {
+      if (isRunningRef.current && i < config.websites.length - 1) {
         setCurrentStatus(`Waiting ${config.delay}s before next website...`);
         await new Promise(resolve => setTimeout(resolve, config.delay * 1000));
       }
@@ -127,6 +129,7 @@ export default function PerformanceTool() {
     setCurrentUrl(undefined);
     setCurrentStatus(undefined);
     setIsRunning(false);
+    isRunningRef.current = false;
 
     toast({
       title: "Test Completed",
@@ -136,6 +139,7 @@ export default function PerformanceTool() {
 
   const handleStopTest = () => {
     setIsRunning(false);
+    isRunningRef.current = false;
     setCurrentUrl(undefined);
     setCurrentStatus(undefined);
     
@@ -144,6 +148,7 @@ export default function PerformanceTool() {
       description: "Website testing has been stopped.",
     });
   };
+
 
   // Clean up opened windows on unmount
   const cleanupWindows = () => {
