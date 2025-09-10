@@ -75,9 +75,9 @@ export function TestResults({ results }: TestResultsProps) {
             <div className="text-center">
               <div className="text-xl md:text-2xl font-bold">
                 {successfulTests.length > 0 
-                  ? Math.round(successfulTests.reduce((sum, r) => sum + (r.loadTime || 0), 0) / successfulTests.length)
+                  ? (successfulTests.reduce((sum, r) => sum + (r.loadTime || 0), 0) / successfulTests.length).toFixed(2)
                   : 0
-                }ms
+                }s
               </div>
               <div className="text-xs md:text-sm opacity-90">Avg Time</div>
             </div>
@@ -113,7 +113,7 @@ export function TestResults({ results }: TestResultsProps) {
                   
                   {result.success ? (
                     <div className={`text-xs md:text-sm font-medium ${getLoadTimeColor(result.loadTime)}`}>
-                      Network Time: {result.loadTime?.toFixed(2)}ms
+                      Load Time: {result.loadTime?.toFixed(2)}s
                       {result.opened && (
                         <span className="text-info ml-2 block md:inline">(Opened in browser tab)</span>
                       )}

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Wifi, Server, Zap } from "lucide-react";
+import { Wifi, Server, Zap, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -11,6 +11,7 @@ export function LatencyMonitor({ isRunning }: LatencyMonitorProps) {
   const [latency, setLatency] = useState<number | null>(null);
   const [server, setServer] = useState("https://httpbin.org/get");
   const [isError, setIsError] = useState(false);
+  const [isMonitoring, setIsMonitoring] = useState(true);
 
   const serverPresets = [
     { name: "HTTPBin", url: "https://httpbin.org/get" },
@@ -57,11 +58,15 @@ export function LatencyMonitor({ isRunning }: LatencyMonitorProps) {
 
   useEffect(() => {
     updateLatency();
-    if (isRunning) {
+    if (isMonitoring) {
       const interval = setInterval(updateLatency, 5000); // Reduce frequency to 5 seconds
       return () => clearInterval(interval);
     }
-  }, [server, isRunning]);
+  }, [server, isMonitoring]);
+
+  const stopMonitoring = () => {
+    setIsMonitoring(false);
+  };
 
   return (
     <div className="bg-gradient-card rounded-2xl p-4 md:p-6 shadow-lg border border-border/50">
@@ -123,6 +128,20 @@ export function LatencyMonitor({ isRunning }: LatencyMonitorProps) {
         <div className="text-xs text-muted-foreground mt-2 truncate px-2">
           Testing: {server}
         </div>
+        
+        {isMonitoring && (
+          <div className="flex justify-center mt-4">
+            <Button
+              onClick={stopMonitoring}
+              variant="outline"
+              size="sm"
+              className="text-xs md:text-sm"
+            >
+              <Square className="h-3 w-3 md:h-4 md:w-4 mr-1" />
+              Stop Monitor
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );

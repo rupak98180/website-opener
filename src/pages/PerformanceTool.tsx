@@ -38,13 +38,47 @@ export default function PerformanceTool() {
       ]);
       const networkTime = performance.now() - fetchStart;
 
-      // Try to open in new tab
+      // Try to open in new tab and wait for load
       const newWindow = window.open(url, '_blank', 'width=1200,height=800');
       if (newWindow) {
         openedWindowsRef.current.push(newWindow);
-        return { url, loadTime: networkTime, success: true, opened: true };
+        
+        // Wait for page to load or timeout
+        try {
+          await new Promise((resolve, reject) => {
+            const checkInterval = setInterval(() => {
+              try {
+                if (newWindow.closed) {
+                  clearInterval(checkInterval);
+                  resolve(undefined);
+                  return;
+                }
+                // Check if page is loaded (this will throw if cross-origin)
+                if (newWindow.document.readyState === 'complete') {
+                  clearInterval(checkInterval);
+                  resolve(undefined);
+                }
+              } catch {
+                // Cross-origin, wait for estimated load time
+                clearInterval(checkInterval);
+                setTimeout(resolve, 3000); // Wait 3 seconds for load
+              }
+            }, 100);
+            
+            // Timeout after specified time
+            setTimeout(() => {
+              clearInterval(checkInterval);
+              resolve(undefined);
+            }, timeoutMs);
+          });
+        } catch {
+          // Ignore load check errors
+        }
+        
+        const totalTime = performance.now() - startTime;
+        return { url, loadTime: totalTime / 1000, success: true, opened: true }; // Convert to seconds
       } else {
-        return { url, loadTime: networkTime, success: true, opened: false };
+        return { url, loadTime: networkTime / 1000, success: true, opened: false }; // Convert to seconds
       }
     } catch (error) {
       // Try opening the URL anyway
@@ -52,8 +86,12 @@ export default function PerformanceTool() {
         const newWindow = window.open(url, '_blank', 'width=1200,height=800');
         if (newWindow) {
           openedWindowsRef.current.push(newWindow);
+          
+          // Wait for estimated load time
+          await new Promise(resolve => setTimeout(resolve, 3000));
+          
           const estimatedTime = performance.now() - startTime;
-          return { url, loadTime: estimatedTime, success: true, opened: true };
+          return { url, loadTime: estimatedTime / 1000, success: true, opened: true }; // Convert to seconds
         } else {
           return { 
             url, 
