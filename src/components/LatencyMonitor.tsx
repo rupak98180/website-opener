@@ -11,7 +11,6 @@ export function LatencyMonitor({ isRunning }: LatencyMonitorProps) {
   const [latency, setLatency] = useState<number | null>(null);
   const [server, setServer] = useState("https://httpbin.org/get");
   const [isError, setIsError] = useState(false);
-  const [isMonitoring, setIsMonitoring] = useState(true);
 
   const serverPresets = [
     { name: "HTTPBin", url: "https://httpbin.org/get" },
@@ -57,15 +56,15 @@ export function LatencyMonitor({ isRunning }: LatencyMonitorProps) {
   };
 
   useEffect(() => {
-    updateLatency();
-    if (isMonitoring) {
-      const interval = setInterval(updateLatency, 5000); // Reduce frequency to 5 seconds
+    if (isRunning) {
+      updateLatency();
+      const interval = setInterval(updateLatency, 5000);
       return () => clearInterval(interval);
     }
-  }, [server, isMonitoring]);
+  }, [server, isRunning]);
 
   const stopMonitoring = () => {
-    setIsMonitoring(false);
+    // This will be handled by the parent component stopping the test
   };
 
   return (
@@ -129,7 +128,7 @@ export function LatencyMonitor({ isRunning }: LatencyMonitorProps) {
           Testing: {server}
         </div>
         
-        {isMonitoring && (
+        {isRunning && (
           <div className="flex justify-center mt-4">
             <Button
               onClick={stopMonitoring}
