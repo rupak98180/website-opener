@@ -11,6 +11,8 @@ export function LatencyMonitor({ isRunning }: LatencyMonitorProps) {
   const [latency, setLatency] = useState<number | null>(null);
   const [server, setServer] = useState("https://httpbin.org/get");
   const [isError, setIsError] = useState(false);
+  const [isMonitoring, setIsMonitoring] = useState(false);
+  const [latencyHistory, setLatencyHistory] = useState<number[]>([]);
 
   const serverPresets = [
     { name: "HTTPBin", url: "https://httpbin.org/get" },
@@ -28,6 +30,7 @@ export function LatencyMonitor({ isRunning }: LatencyMonitorProps) {
       await fetch(server, { mode: 'cors' });
       const result = Math.round(performance.now() - start);
       setLatency(result);
+      setLatencyHistory(prev => [...prev.slice(-19), result]); // Keep last 20 readings
     } catch {
       // Fallback method
       const img = new Image();
@@ -35,6 +38,7 @@ export function LatencyMonitor({ isRunning }: LatencyMonitorProps) {
       img.onload = img.onerror = () => {
         const result = Math.round(performance.now() - imgStart);
         setLatency(result);
+        setLatencyHistory(prev => [...prev.slice(-19), result]); // Keep last 20 readings
       };
       img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
       setIsError(true);
@@ -56,15 +60,20 @@ export function LatencyMonitor({ isRunning }: LatencyMonitorProps) {
   };
 
   useEffect(() => {
-    if (isRunning) {
+    if (isRunning || isMonitoring) {
       updateLatency();
-      const interval = setInterval(updateLatency, 5000);
+      const interval = setInterval(updateLatency, 2000); // Every 2 seconds for more responsive monitoring
       return () => clearInterval(interval);
     }
-  }, [server, isRunning]);
+  }, [server, isRunning, isMonitoring]);
+
+  const startMonitoring = () => {
+    setIsMonitoring(true);
+    setLatencyHistory([]);
+  };
 
   const stopMonitoring = () => {
-    // This will be handled by the parent component stopping the test
+    setIsMonitoring(false);
   };
 
   return (
@@ -87,12 +96,17 @@ export function LatencyMonitor({ isRunning }: LatencyMonitorProps) {
             className="flex-1 text-sm"
           />
           <Button
-            onClick={updateLatency}
+            onClick={isMonitoring ? stopMonitoring : startMonitoring}
             size="sm"
-            className="bg-primary hover:bg-primary-hover text-primary-foreground px-2 md:px-4"
+            className={`${isMonitoring 
+              ? 'bg-destructive hover:bg-destructive/80' 
+              : 'bg-primary hover:bg-primary-hover'
+            } text-primary-foreground px-2 md:px-4`}
           >
             <Zap className="h-3 w-3 md:h-4 md:w-4" />
-            <span className="hidden md:inline ml-1">Test</span>
+            <span className="hidden md:inline ml-1">
+              {isMonitoring ? 'Stop' : 'Test'}
+            </span>
           </Button>
         </div>
       </div>
@@ -128,7 +142,32 @@ export function LatencyMonitor({ isRunning }: LatencyMonitorProps) {
           Testing: {server}
         </div>
         
-        {isRunning && (
+        {/* Latency History Graph */}
+        {latencyHistory.length > 1 && (isMonitoring || isRunning) && (
+          <div className="mt-4">
+            <div className="text-xs text-muted-foreground mb-2">Latency History</div>
+            <div className="flex items-end justify-center gap-1 h-16 bg-background/30 rounded-lg p-2">
+              {latencyHistory.map((value, index) => {
+                const height = Math.max(4, (value / Math.max(...latencyHistory)) * 48);
+                return (
+                  <div
+                    key={index}
+                    className={`w-1 rounded-sm ${getLatencyStatus(value).replace('text-', 'bg-')}`}
+                    style={{ height: `${height}px` }}
+                    title={`${value}ms`}
+                  />
+                );
+              })}
+            </div>
+            <div className="text-xs text-muted-foreground mt-1">
+              Avg: {(latencyHistory.reduce((a, b) => a + b, 0) / latencyHistory.length).toFixed(0)}ms
+              | Min: {Math.min(...latencyHistory)}ms
+              | Max: {Math.max(...latencyHistory)}ms
+            </div>
+          </div>
+        )}
+        
+        {(isRunning || isMonitoring) && (
           <div className="flex justify-center mt-4">
             <Button
               onClick={stopMonitoring}
