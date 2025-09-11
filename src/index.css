@@ -132,7 +132,7 @@
   }
 
   body {
-    @apply bg-gradient-to-br from-primary/10 via-background to-secondary/8 text-foreground min-h-screen;
+    @apply bg-gradient-to-br from-primary/10 via-background to-secondary/10 text-foreground min-h-screen;
     background-attachment: fixed;
   }
 }
