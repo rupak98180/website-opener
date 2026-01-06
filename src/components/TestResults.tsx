@@ -1,5 +1,10 @@
 import { CheckCircle, XCircle, ExternalLink, BarChart3, Clock, AlertTriangle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import * as XLSX from "xlsx";
+import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
+import { Capacitor } from '@capacitor/core';
 
 export interface TestResult {
   url: string;
@@ -7,13 +12,16 @@ export interface TestResult {
   success: boolean;
   opened: boolean;
   error?: string;
+  startedAt?: string;
+  endedAt?: string;
 }
 
 interface TestResultsProps {
   results: TestResult[];
+  logs?: { time: string; event: string }[];
 }
 
-export function TestResults({ results }: TestResultsProps) {
+export function TestResults({ results, logs = [] }: TestResultsProps) {
   if (results.length === 0) {
     return null;
   }
@@ -49,6 +57,53 @@ export function TestResults({ results }: TestResultsProps) {
     return "text-destructive";
   };
 
+  const handleExport = async () => {
+    const resultRows = results.map((r) => ({
+      URL: r.url,
+      StartedAt: r.startedAt || "",
+      EndedAt: r.endedAt || "",
+      DurationSeconds: typeof r.loadTime === "number" ? r.loadTime.toFixed(2) : "",
+      Success: r.success ? "Yes" : "No",
+      Opened: r.opened ? "Yes" : "No",
+      Error: r.error || "",
+    }));
+
+    const logRows = logs.map((l) => ({ Time: l.time, Event: l.event }));
+
+    const wb = XLSX.utils.book_new();
+    const wsResults = XLSX.utils.json_to_sheet(resultRows);
+    XLSX.utils.book_append_sheet(wb, wsResults, "Results");
+    const wsLogs = XLSX.utils.json_to_sheet(logRows);
+    XLSX.utils.book_append_sheet(wb, wsLogs, "Logs");
+
+    const ts = new Date().toISOString().replace(/[:.]/g, "-");
+    const fileName = `web-open-test-${ts}.xlsx`;
+
+    if (Capacitor.isNativePlatform()) {
+      try {
+        const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'base64' });
+        
+        const savedFile = await Filesystem.writeFile({
+          path: fileName,
+          data: wbout,
+          directory: Directory.Documents,
+        });
+
+        await Share.share({
+          title: 'Test Results',
+          text: 'Here are the test results',
+          url: savedFile.uri,
+          dialogTitle: 'Share Test Results',
+        });
+      } catch (e: any) {
+        console.error('Error saving file', e);
+        alert('Error saving file: ' + (e.message || e));
+      }
+    } else {
+      XLSX.writeFile(wb, fileName);
+    }
+  };
+
   return (
     <div className="space-y-4 md:space-y-6">
       {/* Summary Statistics */}
@@ -79,7 +134,7 @@ export function TestResults({ results }: TestResultsProps) {
                   : 0
                 }s
               </div>
-              <div className="text-xs md:text-sm opacity-90">Avg Time</div>
+              <div className="text-xs md:text-sm opacity-90">Avg Response</div>
             </div>
           </div>
         </div>
@@ -87,9 +142,12 @@ export function TestResults({ results }: TestResultsProps) {
 
       {/* Individual Results */}
       <div className="bg-gradient-card rounded-2xl p-4 md:p-6 shadow-lg border border-border/50">
-        <div className="flex items-center gap-2 md:gap-3 mb-4 md:mb-6">
-          <Clock className="h-5 w-5 md:h-6 md:w-6 text-primary" />
-          <h3 className="text-lg md:text-xl font-semibold">Test Results</h3>
+        <div className="flex items-center justify-between mb-4 md:mb-6">
+          <div className="flex items-center gap-2 md:gap-3">
+            <Clock className="h-5 w-5 md:h-6 md:w-6 text-primary" />
+            <h3 className="text-lg md:text-xl font-semibold">Test Results</h3>
+          </div>
+          <Button onClick={handleExport} className="text-sm md:text-base">Export Excel</Button>
         </div>
 
         <div className="space-y-2 md:space-y-3 max-h-80 md:max-h-96 overflow-y-auto">
@@ -113,15 +171,23 @@ export function TestResults({ results }: TestResultsProps) {
                   
                   {result.success ? (
                     <div className={`text-xs md:text-sm font-medium ${getLoadTimeColor(result.loadTime)}`}>
-                      Load Time: {result.loadTime?.toFixed(2)}s
+                      {Capacitor.isNativePlatform() ? "Load Time" : "Load Time"}: {result.loadTime?.toFixed(2)}s
                       {result.opened && (
                         <span className="text-info ml-2 block md:inline">(Opened in browser tab)</span>
+                      )}
+                      {result.startedAt && result.endedAt && (
+                        <div className="text-muted-foreground mt-1">
+                          Start: {new Date(result.startedAt).toLocaleString()} · End: {new Date(result.endedAt).toLocaleString()}
+                        </div>
                       )}
                     </div>
                   ) : (
                     <div className="flex items-center gap-2 text-xs md:text-sm text-destructive">
                       <AlertTriangle className="h-3 w-3 md:h-4 md:w-4 flex-shrink-0" />
                       <span className="break-words">{result.error}</span>
+                      {result.startedAt && result.endedAt && (
+                        <span className="text-muted-foreground block md:inline ml-2">Start: {new Date(result.startedAt).toLocaleString()} · End: {new Date(result.endedAt).toLocaleString()}</span>
+                      )}
                     </div>
                   )}
                 </div>

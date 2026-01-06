@@ -5,6 +5,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Play, Square, Settings, Globe, Clock, Timer } from "lucide-react";
 
+// Add this import at the top of the file
+import { OverlayPermission } from '../lib/overlay-permission';
+
 interface TestConfigurationProps {
   onStartTest: (config: TestConfig) => void;
   onStopTest: () => void;
@@ -18,10 +21,10 @@ export interface TestConfig {
 }
 
 export function TestConfiguration({ onStartTest, onStopTest, isRunning }: TestConfigurationProps) {
-  const [websites, setWebsites] = useState(`https://cnn.com
+  const [websites, setWebsites] = useState(`https://www.indiatoday.in/
+https://cnn.com
 https://github.com
 https://stackoverflow.com
-https://youtube.com
 https://bbc.com
 https://reuters.com
 https://apnews.com
@@ -29,7 +32,74 @@ https://nytimes.com
 https://washingtonpost.com
 https://theguardian.com`);
   const [timeout, setTimeout] = useState(10);
-  const [delay, setDelay] = useState(3);
+  const [delay, setDelay] = useState(5);
+
+  const websitePool = [
+    "https://google.com",
+    "https://bbc.com",
+    "https://cnn.com",
+    "https://twitter.com",
+    "https://github.com",
+    "https://stackoverflow.com",
+    "https://wikipedia.org",
+    "https://bbc.com",
+    "https://cnn.com",
+    "https://nytimes.com",
+    "https://theguardian.com",
+    "https://washingtonpost.com",
+    "https://reuters.com",
+    "https://apnews.com",
+    "https://bloomberg.com",
+    "https://aljazeera.com",
+    "https://yahoo.com",
+    "https://microsoft.com",
+    "https://apple.com",
+    "https://amazon.com",
+    "https://apnews.com",
+    "https://spotify.com",
+    "https://reddit.com",
+    "https://medium.com",
+    "https://producthunt.com",
+    "https://news.ycombinator.com",
+    "https://cloudflare.com",
+    "https://discord.com",
+    "https://slack.com",
+    "https://zoom.us",
+    "https://whatsapp.com",
+    "https://telegram.org",
+    "https://linkedin.com",
+    "https://paypal.com",
+    "https://stripe.com",
+    "https://shopify.com",
+    "https://salesforce.com",
+    "https://openai.com",
+    "https://npmjs.com",
+    "https://pypi.org",
+    "https://rust-lang.org",
+    "https://go.dev",
+    "https://kotlinlang.org",
+    "https://android.com",
+    "https://developer.apple.com",
+    "https://ubuntu.com",
+    "https://debian.org",
+    "https://archlinux.org",
+    "https://docker.com",
+    "https://kubernetes.io",
+    "https://grafana.com",
+    "https://prometheus.io",
+    "https://elastic.co",
+    "https://mozilla.org",
+    "https://firefox.com",
+    "https://opera.com",
+    "https://edge.microsoft.com",
+    "https://selenium.dev",
+  ];
+
+  const generateBundle = (count: number) => {
+    const shuffled = [...websitePool].sort(() => Math.random() - 0.5);
+    const selected = shuffled.slice(0, count);
+    setWebsites(selected.join("\n"));
+  };
 
   const handleStart = () => {
     const websiteList = websites
@@ -64,6 +134,13 @@ https://theguardian.com`);
             <Globe className="h-3 w-3 md:h-4 md:w-4" />
             Website URLs (one per line)
           </Label>
+          <div className="flex flex-wrap gap-2">
+            {[10, 20, 30].map((size) => (
+              <Button key={size} variant="outline" className="px-3 py-2 text-sm" onClick={() => generateBundle(size)}>
+                {size} URLs
+              </Button>
+            ))}
+          </div>
           <Textarea
             id="websites"
             value={websites}
@@ -77,36 +154,24 @@ https://github.com"
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
           <div className="space-y-2">
-            <Label htmlFor="timeout" className="flex items-center gap-2 text-sm md:text-base">
+            <Label className="flex items-center gap-2 text-sm md:text-base">
               <Clock className="h-3 w-3 md:h-4 md:w-4" />
               Timeout (seconds)
             </Label>
-            <Input
-              id="timeout"
-              type="number"
-              value={timeout}
-              onChange={(e) => setTimeout(Number(e.target.value))}
-              min={5}
-              max={30}
-              className="text-sm md:text-base"
-            />
+            <div className="flex flex-wrap gap-2">
+              {[10,20,30,40,50,60].map((t) => (
+                <Button
+                  key={t}
+                  variant={timeout === t ? "default" : "outline"}
+                  onClick={() => setTimeout(t)}
+                  className="px-3 py-2 text-sm"
+                >
+                  {t}
+                </Button>
+              ))}
+            </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="delay" className="flex items-center gap-2 text-sm md:text-base">
-              <Timer className="h-3 w-3 md:h-4 md:w-4" />
-              Delay between sites (seconds)
-            </Label>
-            <Input
-              id="delay"
-              type="number"
-              value={delay}
-              onChange={(e) => setDelay(Number(e.target.value))}
-              min={1}
-              max={10}
-              className="text-sm md:text-base"
-            />
-          </div>
         </div>
 
         <div className="pt-2 md:pt-4">
@@ -133,3 +198,24 @@ https://github.com"
     </div>
   );
 }
+
+// Add this function to your component
+const requestOverlayPermission = async () => {
+  try {
+    const { value } = await OverlayPermission.requestPermission();
+    if (value) {
+      console.log('Overlay permission granted');
+      // Continue with your app logic
+    } else {
+      console.log('Overlay permission denied');
+      // Handle the case when permission is denied
+    }
+  } catch (error) {
+    console.error('Error requesting overlay permission:', error);
+  }
+};
+
+// Call this function when appropriate, for example in a useEffect or button click
+// useEffect(() => {
+//   requestOverlayPermission();
+// }, []);

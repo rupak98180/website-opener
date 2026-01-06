@@ -1,11 +1,11 @@
 import { useState, useRef } from "react";
 import { PerformanceHeader } from "@/components/PerformanceHeader";
-import { InfoAlerts } from "@/components/InfoAlerts";
 import { LatencyMonitor } from "@/components/LatencyMonitor";
 import { TestConfiguration, TestConfig } from "@/components/TestConfiguration";
 import { TestProgress } from "@/components/TestProgress";
 import { TestResults, TestResult } from "@/components/TestResults";
 import { useToast } from "@/hooks/use-toast";
+import { CapacitorHttp, Capacitor } from '@capacitor/core';
 
 export default function PerformanceTool() {
   const [isRunning, setIsRunning] = useState(false);
@@ -14,13 +14,31 @@ export default function PerformanceTool() {
   const [currentUrl, setCurrentUrl] = useState<string>();
   const [currentStatus, setCurrentStatus] = useState<string>();
   const [results, setResults] = useState<TestResult[]>([]);
+  const [logs, setLogs] = useState<{ time: string; event: string }[]>([]);
   const openedWindowsRef = useRef<Window[]>([]);
   const isRunningRef = useRef(false);
   const { toast } = useToast();
 
+  const addLog = (event: string) => {
+    setLogs((prev) => [...prev, { time: new Date().toISOString(), event }]);
+  };
+
   const testWebsite = async (url: string, timeout: number): Promise<TestResult> => {
     const startTime = performance.now();
+    const wallStart = new Date().toISOString();
     const timeoutMs = timeout * 1000;
+
+    // Check for internet connection immediately
+    if (!navigator.onLine) {
+      return {
+        url,
+        success: false,
+        opened: false,
+        error: 'No Internet Connection',
+        startedAt: wallStart,
+        endedAt: new Date().toISOString()
+      };
+    }
 
     // Ensure URL has protocol
     if (!url.startsWith('http://') && !url.startsWith('https://')) {
@@ -28,22 +46,38 @@ export default function PerformanceTool() {
     }
 
     try {
-      // Test network connectivity
-      const fetchStart = performance.now();
-      await Promise.race([
-        fetch(url, { mode: 'no-cors', method: 'HEAD' }),
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Fetch timeout')), timeoutMs)
-        )
-      ]);
-      const networkTime = performance.now() - fetchStart;
+      // Test network connectivity and download HTML
+      // We use CapacitorHttp on native to ensure full HTML download and bypass CORS
+      if (Capacitor.isNativePlatform()) {
+        const response = await CapacitorHttp.get({
+          url,
+          readTimeout: timeoutMs,
+          connectTimeout: timeoutMs
+        });
 
-      // Try to open in new tab and wait for load
+        if (response.status < 200 || response.status >= 400) {
+          throw new Error(`HTTP Error ${response.status}`);
+        }
+        // If successful, HTML body is downloaded in response.data
+      } else {
+        // Fallback for Web/Dev environment (limited by CORS)
+        const controller = new AbortController();
+        const id = setTimeout(() => controller.abort(), timeoutMs);
+        await fetch(url, { 
+          mode: 'no-cors', 
+          method: 'GET', // Changed from HEAD to GET to attempt full download
+          signal: controller.signal
+        });
+        clearTimeout(id);
+      }
+
+      // Try to open in new tab
       const newWindow = window.open(url, '_blank', 'width=1200,height=800');
       if (newWindow) {
         openedWindowsRef.current.push(newWindow);
+        window.focus();
         
-        // Wait for page to load or timeout
+        // Wait for page to load or timeout (Best effort for cross-origin)
         try {
           await new Promise((resolve, reject) => {
             const checkInterval = setInterval(() => {
@@ -53,65 +87,71 @@ export default function PerformanceTool() {
                   resolve(undefined);
                   return;
                 }
-                // Check if page is loaded (this will throw if cross-origin)
+                
+                // Only works for same-origin
                 if (newWindow.document.readyState === 'complete') {
                   clearInterval(checkInterval);
                   resolve(undefined);
                 }
               } catch {
-                // Cross-origin, wait for estimated load time
+                // Cross-origin: We already verified HTML download via CapacitorHttp
                 clearInterval(checkInterval);
-                setTimeout(resolve, 3000); // Wait 3 seconds for load
+                resolve(undefined);
               }
             }, 100);
             
-            // Timeout after specified time
             setTimeout(() => {
               clearInterval(checkInterval);
               resolve(undefined);
-            }, timeoutMs);
+            }, 3000); // Give it a moment to render visually
           });
         } catch {
-          // Ignore load check errors
+          // Ignore
         }
         
         const totalTime = performance.now() - startTime;
-        return { url, loadTime: totalTime / 1000, success: true, opened: true }; // Convert to seconds
+        return { url, loadTime: totalTime / 1000, success: true, opened: true, startedAt: wallStart, endedAt: new Date().toISOString() };
       } else {
-        return { url, loadTime: networkTime / 1000, success: true, opened: false }; // Convert to seconds
+        // Window failed to open
+        const totalTime = performance.now() - startTime;
+        return { url, loadTime: totalTime / 1000, success: true, opened: false, startedAt: wallStart, endedAt: new Date().toISOString() };
       }
     } catch (error) {
-      // Try opening the URL anyway
+      // If network test failed (including non-200 status on native)
+      // Try to open the window anyway for visual confirmation of error
       try {
         const newWindow = window.open(url, '_blank', 'width=1200,height=800');
         if (newWindow) {
           openedWindowsRef.current.push(newWindow);
-          
-          // Wait for estimated load time
-          await new Promise(resolve => setTimeout(resolve, 3000));
-          
-          const estimatedTime = performance.now() - startTime;
-          return { url, loadTime: estimatedTime / 1000, success: true, opened: true }; // Convert to seconds
-        } else {
-          return { 
-            url, 
-            success: false, 
-            opened: false, 
-            error: 'Unable to open website and network test failed' 
-          };
+          window.focus();
         }
       } catch {
-        return { 
-          url, 
-          success: false, 
-          opened: false, 
-          error: error instanceof Error ? error.message : 'Network error' 
-        };
+        // Ignore
       }
+
+      return { 
+        url, 
+        success: false, 
+        opened: false, 
+        error: error instanceof Error ? error.message : 'Network test failed',
+        startedAt: wallStart,
+        endedAt: new Date().toISOString()
+      };
     }
   };
 
   const handleStartTest = async (config: TestConfig) => {
+    // Check for internet connection before starting
+    if (!navigator.onLine) {
+      toast({
+        title: "No Internet Connection",
+        description: "Please check your internet connection and try again.",
+        variant: "destructive",
+      });
+      addLog("Test failed: No internet connection");
+      return;
+    }
+
     // Check if pop-ups are likely blocked
     const testWindow = window.open('', '_blank', 'width=1,height=1');
     if (!testWindow) {
@@ -120,6 +160,7 @@ export default function PerformanceTool() {
         description: "Pop-ups are blocked! Please allow pop-ups for this site to see websites open in browser tabs. The test will still measure network performance.",
         variant: "destructive",
       });
+      addLog("Pop-ups blocked by browser");
     } else {
       testWindow.close();
     }
@@ -135,18 +176,25 @@ export default function PerformanceTool() {
       title: "Test Started",
       description: `Testing ${config.websites.length} websites in browser tabs...`,
     });
+    addLog(`Test started for ${config.websites.length} websites`);
+
+    // const delayMs = config.delay * 1000; // Using timeout as the pacing mechanism instead of delay
+    // const baseStart = performance.now();
 
     for (let i = 0; i < config.websites.length; i++) {
       if (!isRunningRef.current) break;
 
+      const testStart = performance.now();
       const url = config.websites[i];
       setCurrentTest(i + 1);
       setCurrentUrl(url);
       setCurrentStatus(`Opening in browser tab... (${i + 1}/${config.websites.length})`);
+      addLog(`Opening ${url}`);
 
       try {
         const result = await testWebsite(url, config.timeout);
         setResults(prev => [...prev, result]);
+        addLog(`Success: ${url} opened=${result.opened} duration=${result.loadTime?.toFixed(2)}s`);
       } catch (error) {
         const errorResult: TestResult = {
           url,
@@ -155,12 +203,21 @@ export default function PerformanceTool() {
           error: error instanceof Error ? error.message : 'Unknown error'
         };
         setResults(prev => [...prev, errorResult]);
+        addLog(`Error: ${url} - ${errorResult.error}`);
       }
 
-      // Delay between tests (except for the last one)
-      if (isRunningRef.current && i < config.websites.length - 1) {
-        setCurrentStatus(`Waiting ${config.delay}s before next website...`);
-        await new Promise(resolve => setTimeout(resolve, config.delay * 1000));
+      // Wait for the remainder of the timeout period before starting the next test
+      if (i < config.websites.length - 1 && isRunningRef.current) {
+        const testEnd = performance.now();
+        const elapsed = testEnd - testStart;
+        const timeoutMs = config.timeout * 1000;
+        const waitMs = timeoutMs - elapsed;
+
+        if (waitMs > 0) {
+          setCurrentStatus(`Waiting ${(waitMs / 1000).toFixed(1)}s before next website...`);
+          addLog(`Waiting ${(waitMs / 1000).toFixed(1)}s before next website`);
+          await new Promise(resolve => setTimeout(resolve, waitMs));
+        }
       }
     }
 
@@ -168,6 +225,7 @@ export default function PerformanceTool() {
     setCurrentStatus(undefined);
     setIsRunning(false);
     isRunningRef.current = false;
+    addLog("Test completed");
 
     toast({
       title: "Test Completed",
@@ -180,6 +238,7 @@ export default function PerformanceTool() {
     isRunningRef.current = false;
     setCurrentUrl(undefined);
     setCurrentStatus(undefined);
+    addLog("Test stopped by user");
     
     toast({
       title: "Test Stopped",
@@ -210,7 +269,7 @@ export default function PerformanceTool() {
           <PerformanceHeader />
           
           <div className="p-4 md:p-8 space-y-4 md:space-y-8">
-            <InfoAlerts />
+
             
             <LatencyMonitor isRunning={isRunning} />
             
@@ -228,7 +287,7 @@ export default function PerformanceTool() {
               currentStatus={currentStatus}
             />
             
-            <TestResults results={results} />
+            <TestResults results={results} logs={logs} />
           </div>
         </div>
       </div>
